@@ -1,0 +1,111 @@
+import os
+import google.generativeai as genai
+from courtlistener_tools import search_courtlistener_cases, get_case_opinion_text
+from texas_law_tools import query_texas_statutes
+
+class TexasLegalAgent:
+    """
+    Binds the toolsets to a Gemini GenerativeModel using advanced XML-based prompt engineering 
+    for strict adherence to the Reasoning/Chaining framework.
+    """
+    def __init__(self):
+        self.api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required.")
+        
+        # Configure SDK
+        genai.configure(api_key=self.api_key)
+        
+        self.system_instruction = """
+<system_directive>
+    <persona>
+        You are an elite Legal Compliance AI Agent specializing in Texas Law (TRCP, Codified Statutes, and Constitution).
+        Your primary directive is absolute factual accuracy. You have zero tolerance for legal hallucination.
+    </persona>
+    
+    <chaining_rules>
+        You must independently verify claims by actively chaining your tools (Thought -> Action -> Observation -> Synthesis).
+        1. CITATION DISCOVERY: When you spot a case citation (e.g., 'Roe v. Wade' or '410 U.S. 113'), call `search_courtlistener_cases`.
+        2. CRITICAL LINK: You MUST take the `id` returned from the search and immediately pass it into `get_case_opinion_text` to read the ruling.
+        3. STATUTORY CHECK: Extract procedural concepts (e.g., 'Motion to Dismiss', 'TRCP 21') and query them using `query_texas_statutes`.
+    </chaining_rules>
+    
+    <constraints>
+        - NEVER GUESS: If a tool returns an error or no results, you must state clearly that the legal claim could not be verified.
+        - EXHAUSTIVE EXECUTION: Verify all citations before generating the final report.
+    </constraints>
+    
+    <output_format>
+        Output your final analysis strictly in this Markdown format:
+        ### 1. Executive Summary
+        ### 2. Procedural & Statutory Audit
+        ### 3. Case Law Verification
+        ### 4. Defects & Recommendations
+    </output_format>
+</system_directive>
+"""
+        
+        self.tools = [
+            search_courtlistener_cases, 
+            get_case_opinion_text, 
+            query_texas_statutes
+        ]
+        
+        # Initialize Gemini 1.5 Pro with optimized settings
+        self.model = genai.GenerativeModel(
+            model_name='gemini-1.5-pro',
+            tools=self.tools,
+            system_instruction=self.system_instruction,
+            generation_config=genai.GenerationConfig(
+                temperature=0.1, # Low temperature for analytical consistency
+                top_p=0.95,
+            )
+        )
+        
+    def execute_task(self, document_text: str) -> str:
+        """
+        Initiates the autonomous reasoning loop and captures the audit trail.
+        """
+        chat = self.model.start_chat(enable_automatic_function_calling=True)
+        
+        prompt = (
+            f"Review the following document. Execute your tool chain to verify "
+            f"citations and procedural claims. Provide a final compliance report.\n\n"
+            f"<document>\n{document_text}\n</document>"
+        )
+        
+        try:
+            print("[System] Agent is analyzing document and building tool execution chain...\n")
+            response = chat.send_message(prompt)
+            
+            # Reconstruct and output the Agent's thought process (Audit Trail)
+            print("--- AGENT AUDIT TRAIL ---")
+            for message in chat.history:
+                if message.role == 'model' and message.parts:
+                    for part in message.parts:
+                        if part.function_call:
+                            # Map arguments to string for display
+                            args = ", ".join(f"{k}={v}" for k, v in part.function_call.args.items())
+                            print(f"[ACTION] Invoked Tool: {part.function_call.name}({args})")
+            print("-------------------------\n")
+            
+            return response.text
+            
+        except Exception as e:
+            return f"Agent execution encountered a critical failure: {str(e)}"
+
+if __name__ == "__main__":
+    sample_doc = """
+    DEFENDANT's MOTION TO DISMISS
+    
+    The plaintiff's claims are entirely frivolous. 
+    Furthermore, under Roe v. Wade, 410 U.S. 113, this court has absolute jurisdiction. 
+    We request dismissal under TRCP 21.
+    """
+    try:
+        agent = TexasLegalAgent()
+        report = agent.execute_task(sample_doc)
+        print("=== FINAL COMPLIANCE REPORT ===")
+        print(report)
+    except Exception as e:
+        print(f"Error: {e}")
