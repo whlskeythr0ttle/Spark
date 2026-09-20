@@ -1,0 +1,45 @@
+import os
+import argparse
+from agent_orchestrator import TexasLegalAgent
+
+def main():
+    parser = argparse.ArgumentParser(description="Run the Texas Legal Compliance Agent.")
+    parser.add_argument("--file", type=str, help="Path to a text file containing the legal document.", default=None)
+    args = parser.parse_args()
+
+    # To run this, you need to set these environment variables in your terminal:
+    # export GEMINI_API_KEY="your_google_api_key"
+    # export COURTLISTENER_API_TOKEN="your_courtlistener_api_token"
+    
+    if args.file and os.path.exists(args.file):
+        with open(args.file, 'r', encoding='utf-8') as f:
+            sample_document = f.read()
+        print(f"Loading document from {args.file}...\n")
+    else:
+        # Provide a sample document that requires chained reasoning
+        sample_document = """
+        DEFENDANT's MOTION TO DISMISS
+        
+        The plaintiff's claims are frivolous. 
+        Furthermore, as established in Roe v. Wade, 410 U.S. 113, the court has broad 
+        jurisdiction over these matters. 
+        We request immediate dismissal under TRCP 21.
+        """
+        print("Loading default sample document...\n")
+    
+    print(sample_document)
+    print("\nStarting Agentic Review...\n")
+    
+    try:
+        agent = TexasLegalAgent()
+        final_report = agent.execute_task(sample_document)
+        
+        print("\n=== FINAL AGENT REPORT ===")
+        print(final_report)
+        
+    except ValueError as e:
+        print(f"Configuration Error: {e}")
+        print("Please ensure your environment variables are set correctly.")
+
+if __name__ == "__main__":
+    main()
