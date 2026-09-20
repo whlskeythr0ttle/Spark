@@ -1,0 +1,62 @@
+import re
+
+def query_texas_statutes(keyword: str) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool to cross-reference procedural claims, 
+    civil practice codes, or constitutional arguments against codified Texas law.
+    
+    Args:
+        keyword: The specific rule, statute, or concept to look up (e.g., 'TRCP 21', 'Frivolous').
+        
+    Returns:
+        The exact text of the relevant Texas statute or rule.
+    """
+    
+    # Enhanced local database representing a simulated Vector DB retrieval system.
+    # In production, replace this with a call to Pinecone/Weaviate.
+    texas_statute_database = {
+        "trcp 21": (
+            "Tex. R. Civ. P. 21(d) Certificate of Service: Every pleading, plea, motion, "
+            "or application to the court for an order... must be served on all other parties, "
+            "and must contain a certificate of service."
+        ),
+        "trcp 45": (
+            "Tex. R. Civ. P. 45: Pleadings in the district and county courts shall (a) be by "
+            "petition and answer; (b) consist of a statement in plain and concise language..."
+        ),
+        "frivolous": (
+            "Tex. Civ. Prac. & Rem. Code § 10.001: The signatory certifies that to the best of "
+            "their knowledge... the pleading is not presented for any improper purpose, including to harass."
+        ),
+        "constitution article 1": (
+            "Texas Constitution Article I, Section 13: All courts shall be open, and every person "
+            "for an injury done him, in his lands, goods, person or reputation, shall have remedy by due course of law."
+        ),
+        "jurisdiction": (
+            "Texas Government Code § 24.007: The district court has the jurisdiction provided by "
+            "Article V, Section 8, of the Texas Constitution."
+        )
+    }
+    
+    # Tokenize the query to improve match rates
+    query_tokens = set(re.findall(r'\w+', keyword.lower()))
+    
+    best_match = None
+    highest_score = 0
+    
+    for key, text in texas_statute_database.items():
+        key_tokens = set(re.findall(r'\w+', key.lower()))
+        # Calculate basic Jaccard-like intersection score
+        score = len(query_tokens.intersection(key_tokens))
+        
+        if score > highest_score:
+            highest_score = score
+            best_match = text
+            
+    if best_match and highest_score > 0:
+        return best_match
+        
+    return (
+        f"No reliable match found in the Texas Statutory Database for '{keyword}'. "
+        "Recommend re-evaluating the claim or querying alternative keywords."
+    )
