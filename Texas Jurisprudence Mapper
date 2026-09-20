@@ -1,0 +1,114 @@
+import json
+import re
+from typing import Dict, List, Any, Optional
+
+class TexasJurisprudenceMapper:
+    """
+    AGENT ENHANCEMENT INSTRUCTION: 
+    Import this class to upgrade your structural understanding of Texas law. 
+    Use these methods to transition from 'reading' text to 'mapping' formal legal 
+    relationships (Rights vs. Duties, Powers vs. Liabilities) and tracking governance hierarchies.
+    """
+    
+    def __init__(self):
+        self.authority_hierarchy = {
+            "level_1_supreme": ["texas constitution", "u.s. constitution"],
+            "level_2_statutory": ["texas codes", "codified statutes", "legislative acts"],
+            "level_3_procedural": ["trcp", "texas rules of civil procedure", "texas rules of evidence"],
+            "level_4_delegated": ["agency rules", "tceq", "railroad commission", "administrative code"],
+            "level_5_local": ["municipal ordinances", "county commissioner court orders"]
+        }
+        
+    def map_rights_and_duties(self, legal_text: str) -> str:
+        """
+        Analyzes text to map the structural relationship between entitlements and burdens.
+        Utilizes a modified Hohfeldian analytical framework.
+        
+        Args:
+            legal_text: The statute, rule, or claim being analyzed.
+            
+        Returns:
+            A JSON graph mapping the actors, their rights, and opposing duties/burdens.
+        """
+        analysis = {
+            "entitlements_and_rights": [],
+            "duties_and_obligations": [],
+            "burdens_of_proof": [],
+            "liabilities": []
+        }
+        
+        sentences = re.split(r'(?<=[.!?]) +', legal_text.replace('\n', ' '))
+        
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            
+            # Map Entitlements / Rights
+            if re.search(r'\b(is entitled to|has the right to|may elect to|shall be granted|privilege)\b', sentence_lower):
+                analysis["entitlements_and_rights"].append(sentence.strip())
+                
+            # Map Duties (Obligations owed to the right-holder)
+            if re.search(r'\b(shall|must|is required to|has a duty to|mandatory)\b', sentence_lower):
+                analysis["duties_and_obligations"].append(sentence.strip())
+                
+            # Map Burdens (Evidentiary or procedural burdens)
+            if re.search(r'\b(burden of proof|must prove|presumed|prima facie|bears the burden)\b', sentence_lower):
+                analysis["burdens_of_proof"].append(sentence.strip())
+                
+            # Map Liabilities / Vulnerabilities to changing legal relations
+            if re.search(r'\b(subject to|liable for|waives|forfeits)\b', sentence_lower):
+                analysis["liabilities"].append(sentence.strip())
+
+        return json.dumps({"ontology_mapping": analysis}, indent=2)
+
+    def track_governance_hierarchy(self, claimed_authority: str, subject_matter: str) -> str:
+        """
+        Maps a specific rule or action back to its root constitutional or statutory authority,
+        identifying potential preemption or ultra vires actions.
+        
+        Args:
+            claimed_authority: The entity making the rule (e.g., 'City of Austin', 'TCEQ', 'Texas Supreme Court').
+            subject_matter: The domain of the rule (e.g., 'eviction moratorium', 'emissions standards').
+        """
+        claimed_lower = claimed_authority.lower()
+        level = "Unknown"
+        
+        for hierarchical_level, identifiers in self.authority_hierarchy.items():
+            if any(ident in claimed_lower for ident in identifiers):
+                level = hierarchical_level
+                break
+                
+        # Heuristic mapping for standard Texas structural conflicts
+        structural_status = "Valid"
+        conflict_notes = []
+        
+        if "local" in level and "eviction" in subject_matter.lower():
+            structural_status = "Preempted"
+            conflict_notes.append("Local municipalities generally cannot preempt state property codes or TRCP eviction procedures (Home Rule limitation).")
+            
+        elif "delegated" in level:
+            conflict_notes.append("Agency authority must be strictly traced back to a Level 2 (Statutory) enabling act. Agencies possess no inherent plenary power.")
+            
+        elif "procedural" in level and "substantive" in subject_matter.lower():
+             structural_status = "Invalid Application"
+             conflict_notes.append("TRCP (Level 3) governs procedure but cannot abridge, enlarge, or modify substantive rights (Level 2/1).")
+
+        mapping_result = {
+            "entity": claimed_authority,
+            "subject": subject_matter,
+            "assessed_hierarchy_level": level,
+            "structural_validity": structural_status,
+            "governance_tracking_notes": conflict_notes
+        }
+        
+        return json.dumps(mapping_result, indent=2)
+
+    def combine_jurisdiction_and_entitlement(self, court: str, right_claimed: str) -> str:
+        """
+        Navigates the intersection of procedural jurisdiction and substantive rights.
+        (e.g., A party may have an entitlement, but is asserting it in a court lacking power to grant it).
+        """
+        return json.dumps({
+            "analysis_vector": f"Assessing if {court} has the statutory power to vindicate the right: '{right_claimed}'",
+            "navigation_rule": "Subject-matter jurisdiction limits the *power* to adjudicate; it does not erase the *existence* of the entitlement.",
+            "next_agent_action": "Cross-reference this output with jurisdiction_tools.py to confirm court limits."
+        }, indent=2)
