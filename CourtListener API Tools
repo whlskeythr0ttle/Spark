@@ -1,0 +1,93 @@
+import os
+import requests
+import urllib.parse
+import re
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from typing import Dict, Any, List
+
+def get_resilient_session() -> requests.Session:
+    """Creates a requests session with built-in retry logic for rate limits (429)."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+def search_courtlistener_cases(query: str, jurisdiction: str = "tx") -> List[Dict[str, Any]]:
+    """
+    AGENT INSTRUCTION: Use this tool FIRST when encountering a case citation or case name.
+    Searches the CourtListener database to retrieve the foundational case 'id'.
+    
+    Args:
+        query: The citation (e.g., '410 U.S. 113') or legal concept to search for.
+        jurisdiction: The jurisdiction code (default is 'tx' for Texas courts).
+        
+    Returns:
+        A list of dictionaries. You MUST extract the 'id' (cluster_id) and immediately
+        chain it into the `get_case_opinion_text` tool.
+    """
+    api_token = os.environ.get("COURTLISTENER_API_TOKEN")
+    headers = {"Authorization": f"Token {api_token}"} if api_token else {}
+    
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://www.courtlistener.com/api/rest/v4/search/?q={encoded_query}&jurisdictions={jurisdiction}"
+    
+    session = get_resilient_session()
+    try:
+        response = session.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        results = response.json().get('results', [])
+        summary = []
+        for r in results[:3]:
+            summary.append({
+                "id": r.get('id'),
+                "caseName": r.get('caseName'),
+                "citation": r.get('citation', 'No citation provided')
+            })
+        return summary if summary else [{"error": "No cases found matching the query."}]
+    except requests.exceptions.RequestException as e:
+        return [{"error": f"Network or API error during case search: {str(e)}"}]
+
+def get_case_opinion_text(cluster_id: int) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool SECOND, passing the 'id' obtained from `search_courtlistener_cases`.
+    Retrieves the actual text of a judicial opinion to verify factual holdings.
+    
+    Args:
+        cluster_id: The integer ID of the case/cluster from CourtListener.
+        
+    Returns:
+        The cleaned text of the case opinion.
+    """
+    api_token = os.environ.get("COURTLISTENER_API_TOKEN")
+    headers = {"Authorization": f"Token {api_token}"} if api_token else {}
+    
+    url = f"https://www.courtlistener.com/api/rest/v4/opinions/?cluster_id={cluster_id}"
+    session = get_resilient_session()
+    
+    try:
+        response = session.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        results = response.json().get('results', [])
+        if results:
+            raw_text = results[0].get('plain_text') or results[0].get('html_lawbox') or "No text available."
+            
+            # Context Optimization: Strip HTML tags to save LLM tokens and reduce noise
+            clean_text = re.sub(r'<[^>]+>', ' ', raw_text)
+            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+            
+            # Truncate at 4000 chars to maintain context window efficiency
+            return clean_text[:4000] + "\n...[TRUNCATED FOR LENGTH. ANALYZE AVAILABLE TEXT.]"
+            
+        return "No opinions found for this cluster ID."
+    except requests.exceptions.RequestException as e:
+        return f"Network or API error during opinion retrieval: {str(e)}"
