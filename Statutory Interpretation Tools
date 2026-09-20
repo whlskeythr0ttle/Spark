@@ -1,0 +1,78 @@
+import json
+import re
+from typing import Dict, Any
+from courtlistener_tools import search_courtlistener_cases
+
+def parse_statutory_language(statute_text: str) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool to mechanically break down dense statutory text. 
+    It extracts mandatory duties, discretionary powers, and conditional exceptions to 
+    help you accurately interpret legislative intent and operative requirements.
+    
+    Args:
+        statute_text: The raw text of the statute or rule (e.g., obtained from query_texas_statutes).
+        
+    Returns:
+        A structured JSON string categorizing the operative clauses of the statute.
+    """
+    analysis = {
+        "mandatory_directives": [],
+        "discretionary_permissions": [],
+        "conditions_and_exceptions": []
+    }
+    
+    # Split text into sentences for granular analysis
+    sentences = re.split(r'(?<=[.!?]) +', statute_text.replace('\n', ' '))
+    
+    for sentence in sentences:
+        lower_sentence = sentence.lower()
+        
+        # Identify mandatory obligations
+        if re.search(r'\b(shall|must|is required to|will)\b', lower_sentence):
+            analysis["mandatory_directives"].append(sentence.strip())
+            
+        # Identify discretionary powers
+        if re.search(r'\b(may|is authorized to|has the discretion to)\b', lower_sentence):
+            analysis["discretionary_permissions"].append(sentence.strip())
+            
+        # Identify conditional logic or exceptions
+        if re.search(r'\b(except|unless|provided that|however|if|subject to)\b', lower_sentence):
+            analysis["conditions_and_exceptions"].append(sentence.strip())
+            
+    if not any(analysis.values()):
+        return json.dumps({
+            "notice": "No standard operative legal operators (shall/must/may/except) detected.",
+            "raw_text": statute_text
+        })
+        
+    return json.dumps(analysis, indent=2)
+
+def search_statute_precedent(statute_citation: str) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool when a statute's application is ambiguous and you need to 
+    see how Texas courts have interpreted it. It performs an exact-phrase search in CourtListener 
+    specifically targeting judicial opinions citing this statute.
+    
+    Args:
+        statute_citation: The formal citation of the statute (e.g., 'Tex. Civ. Prac. & Rem. Code § 10.001' or 'TRCP 21').
+        
+    Returns:
+        A JSON string containing case cluster IDs that cite this statute. 
+        You MUST chain these IDs into get_case_opinion_text to read the actual interpretations.
+    """
+    # Force exact phrase matching in CourtListener by wrapping in quotes
+    exact_phrase_query = f'"{statute_citation}"'
+    
+    # Delegate to the existing resilient search function
+    results = search_courtlistener_cases(exact_phrase_query, jurisdiction="tx")
+    
+    # Return directly if it's an error list
+    if isinstance(results, list) and "error" in results[0]:
+        return json.dumps(results)
+        
+    # Wrap results with specific guidance for the agent
+    return json.dumps({
+        "intent_query": f"Cases interpreting: {statute_citation}",
+        "precedent_cases": results,
+        "next_step_required": "Pass the 'id' of the most relevant case into get_case_opinion_text to read the judicial interpretation."
+    }, indent=2)
