@@ -1,0 +1,79 @@
+import json
+from typing import Optional
+
+def verify_texas_jurisdiction(court_level: str, amount_in_controversy: Optional[float] = None, matter_type: Optional[str] = None) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool whenever a document claims jurisdiction, names a specific court, 
+    or specifies an amount in controversy. This confirms or denies subject-matter jurisdiction.
+    
+    Args:
+        court_level: The type of court (e.g., 'justice', 'county', 'district', 'appellate', 'supreme').
+        amount_in_controversy: The total monetary damages claimed (excluding statutory interest/costs), if known.
+        matter_type: The subject of the lawsuit (e.g., 'eviction', 'divorce', 'title to land', 'probate').
+        
+    Returns:
+        A structured string containing the constitutional and statutory jurisdictional limits for the court.
+    """
+    # Simulated Statutory Jurisdiction Database for Texas
+    jurisdiction_db = {
+        "justice": {
+            "max_amount": 20000.0,
+            "exclusive_matters": ["eviction"],
+            "excluded_matters": ["title to land", "divorce", "defamation", "corporate charter"],
+            "statute": "Tex. Gov't Code § 27.031"
+        },
+        "county": {
+            "min_amount": 200.01,
+            "max_amount": 250000.0,
+            "exclusive_matters": ["probate (in some counties)", "class C misdemeanor appeals"],
+            "excluded_matters": ["divorce", "title to land", "defamation"],
+            "statute": "Tex. Gov't Code § 25.0003"
+        },
+        "district": {
+            "min_amount": 500.01,
+            "max_amount": float('inf'),
+            "exclusive_matters": ["divorce", "title to land", "defamation", "election contests"],
+            "excluded_matters": ["eviction (original jurisdiction)"],
+            "statute": "Tex. Gov't Code § 24.007 & Tex. Const. Art. V, § 8"
+        }
+    }
+    
+    court_key = court_level.lower()
+    matched_court = None
+    for key in jurisdiction_db.keys():
+        if key in court_key:
+            matched_court = key
+            break
+            
+    if not matched_court:
+        return json.dumps({
+            "error": f"Court level '{court_level}' not recognized. Must be justice, county, or district.",
+            "guidance": "Please extract the specific court level from the document and retry."
+        })
+        
+    rules = jurisdiction_db[matched_court]
+    analysis = {
+        "court_analyzed": matched_court.capitalize() + " Court",
+        "governing_statute": rules["statute"],
+        "monetary_limits": f"Min: ${rules.get('min_amount', 0)}, Max: {'No Limit' if rules['max_amount'] == float('inf') else f'${rules['max_amount']}'}"
+    }
+    
+    violations = []
+    if amount_in_controversy is not None:
+        if "min_amount" in rules and amount_in_controversy < rules["min_amount"]:
+            violations.append(f"Amount ${amount_in_controversy} is below the minimum jurisdiction of ${rules['min_amount']}.")
+        if amount_in_controversy > rules["max_amount"]:
+            violations.append(f"Amount ${amount_in_controversy} exceeds the maximum jurisdiction of ${rules['max_amount']}.")
+            
+    if matter_type is not None:
+        matter_lower = matter_type.lower()
+        if any(ex in matter_lower for ex in rules["excluded_matters"]):
+            violations.append(f"This court lacks subject-matter jurisdiction over matters involving: {matter_type}.")
+            
+    if violations:
+        analysis["jurisdiction_status"] = "LIKELY DENIED"
+        analysis["violations"] = violations
+    else:
+        analysis["jurisdiction_status"] = "LIKELY CONFIRMED (Pending further factual review)"
+        
+    return json.dumps(analysis, indent=2)
