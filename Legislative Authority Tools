@@ -1,0 +1,90 @@
+import json
+import difflib
+from typing import Optional
+
+def evaluate_constitutional_authority(subject_matter: str) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool to verify if the Texas Legislature has the 
+    constitutional power to regulate a specific subject matter, or if it is 
+    expressly prohibited (e.g., income tax, local/special laws).
+    
+    Args:
+        subject_matter: The broad topic being legislated (e.g., 'income tax', 'zoning', 'procedural rules').
+        
+    Returns:
+        JSON string detailing the constitutional grant, prohibition, or relevant Article/Section.
+    """
+    # Simulated Constitutional DB (In production, replace with vector DB query against the TX Constitution)
+    constitution_db = {
+        "income tax": {
+            "status": "PROHIBITED WITHOUT VOTER APPROVAL",
+            "source": "Tex. Const. Art. VIII, § 24",
+            "notes": "The legislature may not impose a tax on the net incomes of individuals unless approved by a majority of registered voters."
+        },
+        "procedural rules": {
+            "status": "DELEGATED TO JUDICIARY",
+            "source": "Tex. Const. Art. V, § 31",
+            "notes": "The Supreme Court is responsible for the efficient administration of the judicial branch and shall promulgate rules of civil procedure, subject to legislative veto."
+        },
+        "local laws": {
+            "status": "GENERALLY PROHIBITED",
+            "source": "Tex. Const. Art. III, § 56",
+            "notes": "The legislature shall not, except as otherwise provided in this Constitution, pass any local or special law (e.g., regulating county affairs, incorporating cities)."
+        }
+    }
+    
+    subject_lower = subject_matter.lower()
+    best_match = None
+    highest_score = 0.0
+    
+    for key, data in constitution_db.items():
+        score = difflib.SequenceMatcher(None, subject_lower, key).ratio()
+        if score > highest_score:
+            highest_score = score
+            best_match = key
+            
+    if best_match and highest_score > 0.5:
+        return json.dumps(constitution_db[best_match], indent=2)
+        
+    return json.dumps({
+        "status": "UNDEFINED / GENERAL POLICE POWER",
+        "notes": f"No explicit prohibition or specific constitutional grant found for '{subject_matter}'. The legislature generally acts under its plenary police power unless restricted."
+    })
+
+def check_separation_of_powers(actor: str, action: str) -> str:
+    """
+    AGENT INSTRUCTION: Use this tool when a document claims an entity (Legislature, Agency, Court) 
+    is performing an action that might belong to another branch. Evaluates preemption and delegation.
+    
+    Args:
+        actor: The entity taking action (e.g., 'Legislature', 'TCEQ', 'Municipality', 'Supreme Court').
+        action: What the entity is doing (e.g., 'creating procedural rules', 'assessing criminal penalties').
+        
+    Returns:
+        JSON string assessing if the action violates the separation of powers.
+    """
+    actor = actor.lower()
+    action = action.lower()
+    
+    analysis = {
+        "actor_analyzed": actor.title(),
+        "action_analyzed": action.capitalize(),
+        "separation_of_powers_violation": False,
+        "rationale": "Pending specific analysis."
+    }
+    
+    if "legislature" in actor and "procedural" in action:
+        analysis["separation_of_powers_violation"] = True
+        analysis["rationale"] = "While the legislature has veto power, the Texas Supreme Court has the primary constitutional authority to promulgate rules of civil procedure (Art. V, § 31)."
+        
+    elif "municipality" in actor or "city" in actor:
+        analysis["rationale"] = "Municipalities only have powers expressly granted by the legislature or the constitution (Home Rule). If the state has preempted this field, the local action is void."
+        
+    elif "agency" in actor or "tceq" in actor or "railroad commission" in actor:
+        if "criminal" in action or "tax" in action:
+            analysis["separation_of_powers_violation"] = True
+            analysis["rationale"] = "Administrative agencies generally cannot assess criminal penalties or levy taxes without an explicit, strict statutory delegation from the legislature."
+        else:
+            analysis["rationale"] = "Agency action must remain within the explicit 'four corners' of the statutory delegation provided by the legislature."
+
+    return json.dumps(analysis, indent=2)
